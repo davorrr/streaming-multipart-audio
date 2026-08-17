@@ -1,0 +1,42 @@
+{
+  "name": "streaming-multipart-audio",
+  "version": "1.0.0",
+  "description": "Incremental multipart/mixed parser and gapless Web Audio playback for streamed, out-of-order audio frames.",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "demo": "npm run build && node dist/example/server.js",
+    "demo:cli": "npm run build && node dist/example/cli.js"
+  },
+  "keywords": [
+    "multipart",
+    "streaming",
+    "web-audio",
+    "audio",
+    "parser",
+    "voice"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}
