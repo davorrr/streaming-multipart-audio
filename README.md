@@ -165,12 +165,16 @@ frames is an audible stutter between every chunk.
 
 **Reordering belongs on the client, not the server.** The system this came from fanned synthesis
 across eight workers and then re-ordered the results *before* writing them, so frames left the
-server already in sequence and `X-Chunk-Index` was belt and braces. That works, but it makes the
-server hold a finished frame in memory while an earlier, slower one is still being synthesised —
-and the wire sits idle for exactly as long. Emitting frames as they finish and reordering on the
-client moves that buffer across the network: the early-finishing bytes travel *during* the gap
-instead of after it, and the server stops needing a buffer at all. The index is what makes that
-possible; this is the half that makes it worth doing.
+server already in sequence and `X-Chunk-Index` was belt and braces. That is a defensible choice and
+it is not wrong. It does mean the server holds every early-finishing frame in memory until the
+straggler ahead of it is done, and then writes them all as one burst.
+
+The same bytes cross the wire either way — what changes is *when*. Emitting frames as they finish
+spreads the transfer across the synthesis window instead of bursting it immediately after the slow
+chunk, so by the time playback reaches the tail of a reply the tail is already on the device and no
+longer depends on the network at all. On a good connection this is a wash. On a bad one, the burst
+lands exactly as playback is starting, which is the worst available moment for it. The server also
+stops holding per-request buffers that scale with fan-out times concurrency.
 
 **A missing frame is abandoned, not waited for.** If frames pile up behind a gap past
 `maxPending`, the reassembler gives up on the missing index and drains. A dropped frame should cost
