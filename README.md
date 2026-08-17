@@ -1,5 +1,7 @@
 # streaming-multipart-audio
 
+[![CI](https://github.com/davorrr/streaming-multipart-audio/actions/workflows/ci.yml/badge.svg)](https://github.com/davorrr/streaming-multipart-audio/actions/workflows/ci.yml)
+
 An incremental `multipart/mixed` parser and gapless Web Audio player for a server that streams
 audio **while it is still generating it** — frames arriving out of order, at irregular intervals,
 cut at arbitrary byte offsets by the network.

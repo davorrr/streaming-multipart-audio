@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.x', '22.x']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build and run the test suite
+        run: npm test
+
+      # The CLI demo streams over a real socket with shuffled frames and random
+      # read boundaries, and exits non-zero if playback order is wrong. Cheap
+      # end-to-end check that the pieces still work together.
+      - name: End-to-end smoke test
+        run: npm run demo:cli
