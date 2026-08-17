@@ -58,7 +58,7 @@ the wrong order is worse than audio that is late — it is confidently wrong.
 
 ```bash
 npm install
-npm test        # 36 tests, no browser required
+npm test        # 37 tests, no browser required
 npm run demo    # http://localhost:8080
 npm run demo:cli
 ```
@@ -242,7 +242,7 @@ by decoding one frame ahead rather than starting from cold at each boundary.
 
 ## Tests
 
-36 tests, `node:test`, no browser and no test framework.
+37 tests, `node:test`, no browser and no test framework.
 
 The one that matters most asserts the property that actually defines an incremental parser: **the
 output must not depend on where the network cut the stream.** The same bytes are fed in every
@@ -291,6 +291,10 @@ Both of their bugs are fixed here, and each fix has a test:
   `--chat--`, so the clean-close path never ran in production. End-of-stream covered for it.
 - The web client threw on any part that omitted `Content-Type`, because the header was indexed
   unguarded. The mobile one already defaulted it.
+- The web client matched `audio/wav` exactly, with no fallback branch. It was pointed at two server
+  endpoints, and the other one encoded as AAC — so every audio frame from that endpoint fell past
+  both branches and was discarded in silence. The transcript still rendered; the reply just made no
+  sound. Matching `audio/*` and counting anything unhandled, rather than dropping it, is the fix.
 - Both hardcoded a skip for 10000-byte bodies, working around a dummy all-zero frame the server
   emitted. That is a server bug patched twice on the client; it is not in here.
 - Neither had tests.

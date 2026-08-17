@@ -110,6 +110,31 @@ test('malformed metadata does not take the audio down with it', async () => {
   assert.deepEqual(sink.indices, [0]);
 });
 
+// The web original tested startsWith("audio/wav") with no else branch, so every
+// frame from the endpoint that happened to encode as AAC fell through both
+// branches and was discarded without a word. The text still rendered; the reply
+// was simply silent.
+test('audio frames are accepted whatever the audio subtype is', async () => {
+  const sink = new RecordingSink();
+  const client = new VoiceStreamClient({ sink });
+
+  const stream = concat(
+    frame({ 'Content-Type': 'audio/aac', 'X-Chunk-Index': '0' }, 'aac-body'),
+    frame({ 'Content-Type': 'audio/mpeg', 'X-Chunk-Index': '1' }, 'mpeg-body'),
+    frame({ 'Content-Type': 'audio/wav; codec=pcm', 'X-Chunk-Index': '2' }, 'wav-body'),
+    closeDelimiter(),
+  );
+
+  const stats = await client.consume(reads(stream), BOUNDARY);
+
+  assert.deepEqual(sink.indices, [0, 1, 2]);
+  assert.equal(stats.ignoredFrames, 0, 'nothing may be silently discarded');
+  assert.deepEqual(
+    sink.frames.map((f) => f.contentType),
+    ['audio/aac', 'audio/mpeg', 'audio/wav; codec=pcm'],
+  );
+});
+
 test('frames without X-Chunk-Index fall back to arrival order', async () => {
   const sink = new RecordingSink();
   const client = new VoiceStreamClient({ sink });
