@@ -48,9 +48,9 @@ a whole frame is present, and everything left over has to stay buffered for the 
 find frame boundaries will eventually find one inside a WAV body and tear a frame in half. Audio is
 arbitrary bytes; sooner or later it contains any given sequence.
 
-**Frames arrive out of order.** Synthesis runs concurrently, so index 2 can land before index 1.
-Playing them in arrival order plays the sentence in the wrong order — which is worse than a delay,
-because it is confidently wrong.
+**Frames are produced out of order.** Synthesis is fanned out across workers, so chunk 4 can finish
+before chunk 2. Something has to put them back in sequence before they are played, because audio in
+the wrong order is worse than audio that is late — it is confidently wrong.
 
 ---
 
@@ -163,6 +163,15 @@ thread before the current one ends. Starting the next frame from the previous on
 instead means crossing into the main thread and waiting for the event loop, which at sentence-sized
 frames is an audible stutter between every chunk.
 
+**Reordering belongs on the client, not the server.** The system this came from fanned synthesis
+across eight workers and then re-ordered the results *before* writing them, so frames left the
+server already in sequence and `X-Chunk-Index` was belt and braces. That works, but it makes the
+server hold a finished frame in memory while an earlier, slower one is still being synthesised —
+and the wire sits idle for exactly as long. Emitting frames as they finish and reordering on the
+client moves that buffer across the network: the early-finishing bytes travel *during* the gap
+instead of after it, and the server stops needing a buffer at all. The index is what makes that
+possible; this is the half that makes it worth doing.
+
 **A missing frame is abandoned, not waited for.** If frames pile up behind a gap past
 `maxPending`, the reassembler gives up on the missing index and drains. A dropped frame should cost
 you a word, not the rest of the reply.
@@ -173,8 +182,57 @@ from the user gesture, and on iOS the next reply is then silent until the user t
 
 **Playback lives behind an interface.** `AudioSink` is two methods. `WebAudioSink` implements it for
 the browser, `RecordingSink` implements it for tests, and a platform with no Web Audio implements it
-with whatever it does have — the React Native build of this pipeline wrote each frame to a cache
-file and handed it to the system player, which is a different sink over the identical core.
+with whatever it does have.
+
+The React Native build of this pipeline is the example. It ran the same parser and the same frames,
+and differed only in the sink — it wrote each frame to a cache file and handed the path to the
+system player. Sketched against this interface, that is:
+
+```ts
+// Shape of the React Native sink, for illustration. Not shipped here: it needs
+// the platform packages, so it cannot run in CI or in the demo.
+class ReactNativeFileSink implements AudioSink {
+  #queue: string[] = [];
+  #playing = false;
+  #sound: Sound | null = null;
+
+  async enqueue(frame: AudioFrame): Promise<void> {
+    const file = `${Date.now()}_${frame.index}.aac`;
+    const path = `${RNFS.CachesDirectoryPath}/${file}`;
+    await RNFS.writeFile(path, Buffer.from(frame.bytes).toString('base64'), 'base64');
+    this.#queue.push(path);
+    this.#playNext();
+  }
+
+  #playNext(): void {
+    if (this.#playing || this.#queue.length === 0) return;
+    const path = this.#queue.shift()!;
+    this.#playing = true;
+
+    this.#sound = new Sound(basename(path), RNFS.CachesDirectoryPath, () => {
+      this.#sound!.play(() => {
+        this.#sound!.release();
+        RNFS.unlink(path).catch(() => {});
+        this.#playing = false;
+        this.#playNext();   // ← the next frame only starts loading once this one ends
+      });
+    });
+  }
+
+  stop(): void {
+    this.#queue.length = 0;
+    this.#sound?.stop();
+    this.#sound?.release();
+    this.#sound = null;
+  }
+}
+```
+
+Worth being clear about what that costs, because it is the same structural mistake `WebAudioSink`
+avoids: the next frame is not touched until the current one has finished playing, so every frame
+boundary pays a file read plus a player initialisation. It is sequential, not gapless. A platform
+that cannot schedule against an audio clock cannot fully fix this, but it can get most of the way
+by decoding one frame ahead rather than starting from cold at each boundary.
 
 ---
 
