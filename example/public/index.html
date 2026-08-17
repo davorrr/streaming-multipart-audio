@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>streaming-multipart-audio</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #16181d;
+        --muted: #5f6672;
+        --line: #e3e6ec;
+        --accent: #0f766e;
+        --warn: #b45309;
+        --panel: #f7f8fa;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14161a;
+          --fg: #e8eaee;
+          --muted: #99a0ac;
+          --line: #2a2e36;
+          --accent: #2dd4bf;
+          --warn: #fbbf24;
+          --panel: #1b1e24;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2.5rem 1.5rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main { max-width: 780px; margin: 0 auto; }
+      h1 { font-size: 1.3rem; margin: 0 0 .4rem; letter-spacing: -.01em; }
+      p.lede { color: var(--muted); margin: 0 0 2rem; max-width: 60ch; }
+      fieldset {
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 1rem 1.1rem; margin: 0 0 1.25rem; background: var(--panel);
+      }
+      legend { padding: 0 .4rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+      label { display: inline-flex; align-items: center; gap: .45rem; margin: 0 1.2rem .5rem 0; }
+      input[type="number"] { width: 4rem; padding: .25rem .4rem; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--fg); }
+      .buttons { display: flex; gap: .6rem; margin-bottom: 1.5rem; }
+      button {
+        font: inherit; font-weight: 550; padding: .5rem 1.1rem; border-radius: 7px; cursor: pointer;
+        border: 1px solid var(--accent); background: var(--accent); color: var(--bg);
+      }
+      button.secondary { background: transparent; color: var(--fg); border-color: var(--line); }
+      button:disabled { opacity: .45; cursor: not-allowed; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .88rem; }
+      th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--line); }
+      th { color: var(--muted); font-weight: 550; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+      .held { color: var(--warn); }
+      .order { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .95rem; }
+      .bad { color: var(--warn); font-weight: 600; }
+      .good { color: var(--accent); font-weight: 600; }
+      #status { color: var(--muted); min-height: 1.4em; margin-bottom: 1rem; }
+      .scroll { overflow-x: auto; }
+      code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>streaming-multipart-audio</h1>
+      <p class="lede">
+        The server streams audio frames as it produces them — out of order, with gaps, cut at
+        arbitrary byte offsets. Press play. Then turn off <em>reassemble in index order</em> and
+        press play again: the scale comes out scrambled, which is what the ordering layer is for.
+      </p>
+
+      <fieldset>
+        <legend>server behaviour</legend>
+        <label><input type="checkbox" id="shuffle" checked /> emit frames out of order</label>
+        <label><input type="checkbox" id="jitter" checked /> random gaps between frames</label>
+        <label><input type="checkbox" id="split" checked /> cut frames at random byte offsets</label>
+        <label>frames <input type="number" id="chunks" value="8" min="1" max="8" /></label>
+        <label>drop index <input type="number" id="drop" value="-1" min="-1" max="7" /></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>client behaviour</legend>
+        <label><input type="checkbox" id="reassemble" checked /> reassemble in index order</label>
+      </fieldset>
+
+      <div class="buttons">
+        <button id="play">Play</button>
+        <button id="stop" class="secondary" disabled>Stop (barge-in)</button>
+      </div>
+
+      <div id="status"></div>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>index</th><th>arrived</th><th>bytes</th><th>parser</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
+      <p class="order" id="orders"></p>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
