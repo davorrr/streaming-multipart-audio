@@ -271,10 +271,13 @@ and streamed them to a web app and a React Native app. The full system is closed
 that way; this repo is the transport and playback layer, rewritten standalone.
 
 The two original clients were independent implementations of the same protocol, and each was better
-at a different half. This code takes the wire handling from the mobile one — reading the boundary
-from the response `Content-Type` rather than hardcoding it, and requiring the trailing CRLF before
-treating a body as complete — and the ordering from the web one, which was the only side that had a
-reorder buffer at all.
+at a different half. This code takes the strict framing from the mobile one — requiring the trailing
+CRLF before treating a body as complete, and defaulting a missing `Content-Type` instead of throwing
+on it — and the ordering from the web one, which was the only side with a reorder buffer at all.
+
+Both already read the boundary out of the response header, which is why `fromContentType` is a
+first-class constructor here rather than an afterthought: the same parser was pointed at more than
+one server endpoint, and the endpoints did not agree with each other about audio encoding.
 
 Both of their bugs are fixed here, and each fix has a test:
 
@@ -286,8 +289,8 @@ Both of their bugs are fixed here, and each fix has a test:
   already at offset 0.
 - The closing delimiter was matched as `--chat--\r\n` while the server actually sent a bare
   `--chat--`, so the clean-close path never ran in production. End-of-stream covered for it.
-- Both clients threw on any part that omitted `Content-Type`, because the header was indexed
-  unguarded.
+- The web client threw on any part that omitted `Content-Type`, because the header was indexed
+  unguarded. The mobile one already defaulted it.
 - Both hardcoded a skip for 10000-byte bodies, working around a dummy all-zero frame the server
   emitted. That is a server bug patched twice on the client; it is not in here.
 - Neither had tests.
