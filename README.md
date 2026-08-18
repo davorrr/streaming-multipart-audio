@@ -143,6 +143,82 @@ integer work with no audio stack involved, so the entire protocol layer is exerc
 
 ---
 
+## Wire format
+
+The container is standard `multipart/mixed` (RFC 2046 §5.1.3). The profile is not: every part
+carries `Content-Length`, and ordering is expressed by an application-defined header. This section
+is normative enough to write a server against without reading the source.
+
+```abnf
+stream        = [preamble CRLF] 1*frame close
+frame         = delimiter CRLF header-block CRLF body CRLF
+close         = delimiter "--" [CRLF]
+
+delimiter     = "--" boundary        ; only at stream start, or directly after CRLF
+header-block  = 1*(field-name ":" [SP] field-value CRLF)
+body          = <exactly Content-Length octets, any values whatsoever>
+```
+
+`boundary` is read from the response header, not hardcoded:
+`Content-Type: multipart/mixed; boundary=chat`.
+
+### Headers
+
+| Header | Required | Meaning |
+| --- | --- | --- |
+| `Content-Length` | **yes** | Exact octet count of the body. Nothing is emitted until this many bytes are buffered. |
+| `Content-Type` | no | Dispatch. `application/json` is metadata, `audio/*` is an audio frame. Absent or anything else is counted as ignored, never fatal. |
+| `X-Chunk-Index` | no | Zero-based production sequence number. Absent, frames play in arrival order. |
+
+Header names are case-insensitive; a value may contain colons; on a repeated name the last wins.
+
+### What a conforming parser rejects
+
+Silently resyncing on a malformed stream is how you end up playing half a frame of noise, so these
+are hard errors rather than recoveries:
+
+- a delimiter that is neither at offset 0 nor preceded by CRLF is not a delimiter
+- once anchored, a buffer not starting at a delimiter — the framing is lost, not recoverable
+- a delimiter followed by neither CRLF nor the close marker
+- `Content-Length` missing, non-integer, or negative
+- a header block exceeding `maxHeaderBytes` with no terminator
+- a body not followed by CRLF, mid-stream
+
+One deliberate tolerance: the trailing CRLF may be **omitted on the final frame** at end of stream.
+Real servers do this, including the one this was extracted from.
+
+### Parser states
+
+Every self-loop is the same instruction — *the bytes are not all here yet, keep them and return* —
+which is the entire job of an incremental parser.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Sync
+
+    Sync --> Sync : no delimiter yet, wait
+    Sync --> AtDelimiter : delimiter found, anchor here
+
+    AtDelimiter --> AtDelimiter : under 2 bytes follow, wait
+    AtDelimiter --> Headers : CRLF follows
+    AtDelimiter --> Closed : close marker follows
+
+    Headers --> Headers : header block incomplete, wait
+    Headers --> Body : header block complete, Content-Length read
+
+    Body --> Body : body and trailing CRLF not all here, wait
+    Body --> AtDelimiter : emit frame, consume its bytes
+
+    Closed --> [*]
+```
+
+After the first anchor the parser never searches for a delimiter again. `Body -> AtDelimiter`
+consumes exactly `Content-Length + 2` bytes, which leaves the buffer starting on the next
+delimiter by construction. That invariant is what makes a frame body containing a byte-perfect
+copy of the delimiter a non-event.
+
+---
+
 ## Design decisions
 
 **Bodies are length-delimited, not delimiter-scanned.** Every part must carry `Content-Length`.
