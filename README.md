@@ -189,26 +189,18 @@ Real servers do this, including the one this was extracted from.
 
 ### Parser states
 
-Every self-loop is the same instruction — *the bytes are not all here yet, keep them and return* —
-which is the entire job of an incremental parser.
+The happy path is drawn; the stalls are not. Every state can also run out of bytes, in which case
+the parser retains the remainder, returns to the caller, and resumes in the same state on the next
+`push`. That case is the normal one rather than the exception — it is what *incremental* means here.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Sync
-
-    Sync --> Sync : no delimiter yet, wait
-    Sync --> AtDelimiter : delimiter found, anchor here
-
-    AtDelimiter --> AtDelimiter : under 2 bytes follow, wait
+    Sync --> AtDelimiter : delimiter found
     AtDelimiter --> Headers : CRLF follows
-    AtDelimiter --> Closed : close marker follows
-
-    Headers --> Headers : header block incomplete, wait
-    Headers --> Body : header block complete, Content-Length read
-
-    Body --> Body : body and trailing CRLF not all here, wait
-    Body --> AtDelimiter : emit frame, consume its bytes
-
+    AtDelimiter --> Closed : close marker
+    Headers --> Body : Content-Length read
+    Body --> AtDelimiter : frame emitted
     Closed --> [*]
 ```
 
